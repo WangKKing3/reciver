@@ -208,7 +208,10 @@ static struct bt_conn_cb conn_callbacks = {
 
 int main(void)
 {
-	int err;
+	int err; 
+
+
+        
 
 	printk("\n\n===========================================\n");
 	printk("Joystick Receiver\n");
