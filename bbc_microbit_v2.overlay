@@ -22,7 +22,7 @@
             label = "LED Right";
         };
         led_test: led_test {
-            gpios = <&gpio0 3 0>;  /* P3 - Hvit LED */
+            gpios = <&gpio0 3 0>;  /* P1 - Hvit LED */
             label = "LED Test";
         };
     };
