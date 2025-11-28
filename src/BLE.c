@@ -1,5 +1,5 @@
 #include "BLE.h"
-#include "LED.h"  // ← LEGG TIL DENNE
+#include "LED.h"
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/bluetooth/gatt.h>
@@ -19,6 +19,27 @@ static struct bt_gatt_discover_params discov_param;
 static struct bt_gatt_subscribe_params subscribe_param;
 static struct bt_conn *default_conn;
 
+/* Timeout system - slår av LED-er hvis ingen data mottas */
+#define DATA_TIMEOUT_MS 200  /* 200ms timeout */
+
+static struct k_work_delayable timeout_work;
+static bool timeout_initialized = false;
+
+/* Timeout callback - kalles når ingen data mottas innen timeout */
+static void data_timeout_handler(struct k_work *work)
+{
+	printk("Timeout: No data received - starting idle animation\n");
+	led_start_idle_animation();
+}
+
+/* Reset timeout timer - kalles hver gang data mottas */
+static void reset_timeout(void)
+{
+	if (timeout_initialized) {
+		k_work_reschedule(&timeout_work, K_MSEC(DATA_TIMEOUT_MS));
+	}
+}
+
 static uint8_t notify_func(struct bt_conn *conn,
                            struct bt_gatt_subscribe_params *param,
                            const void *buf, uint16_t len)
@@ -33,8 +54,14 @@ static uint8_t notify_func(struct bt_conn *conn,
 	if (len == sizeof(struct joystick_data)) {
 		printk("Joystick: X=%d, Y=%d ", data->x_pos, data->y_pos);
 		
-		/* OPPDATER LED-ene basert på joystick-posisjon */
-		led_update_direction(data->x_pos, data->y_pos);  // ← LEGG TIL DENNE LINJEN
+		/* Stopp idle animation hvis den kjører */
+		led_stop_idle_animation();
+		
+		/* Oppdater LED-ene basert på joystick-posisjon */
+		led_update_direction(data->x_pos, data->y_pos);
+		
+		/* Reset timeout - vi mottok data */
+		reset_timeout();
 		
 	} else {
 		printk("Invalid data length: %d\n", len);
@@ -191,6 +218,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 		default_conn = NULL;
 	}
 
+	/* Start idle animation ved disconnect */
+	led_start_idle_animation();
+
 	/* Restart scanning */
 	printk("Restarting scan...\n");
 	ble_start_scan();
@@ -211,6 +241,11 @@ int ble_init(void)
 	printk("micro:bit v2 - Zephyr SDK v2.5.1\n");
 	printk("===========================================\n\n");
 
+	/* Initialize timeout work */
+	k_work_init_delayable(&timeout_work, data_timeout_handler);
+	timeout_initialized = true;
+	printk("Timeout system initialized (%d ms)\n", DATA_TIMEOUT_MS);
+
 	/* Initialize Bluetooth */
 	err = bt_enable(NULL);
 	if (err) {
@@ -221,6 +256,9 @@ int ble_init(void)
 	printk("Bluetooth initialized\n");
 
 	bt_conn_cb_register(&conn_callbacks);
+
+	/* Start idle animation ved oppstart */
+	led_start_idle_animation();
 
 	return 0;
 }

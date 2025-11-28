@@ -40,4 +40,14 @@ void led_all_off(void);
  */
 void led_update_direction(int16_t x_pos, int16_t y_pos);
 
+/**
+ * @brief Start idle animation (rotating pattern)
+ */
+void led_start_idle_animation(void);
+
+/**
+ * @brief Stop idle animation
+ */
+void led_stop_idle_animation(void);
+
 #endif /* LED_H */
