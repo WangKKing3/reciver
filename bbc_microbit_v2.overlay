@@ -1,0 +1,29 @@
+/ {
+    led_direction_pins {
+        compatible = "gpio-leds";
+        
+        led_up: led_up {
+            gpios = <&gpio0 28 0>;  /* P4 - Opp */
+            label = "LED Up";
+        };
+        
+        led_down: led_down {
+            gpios = <&gpio1 5 0>;   /* P6 - Ned */
+            label = "LED Down";
+        };
+        
+        led_left: led_left {
+            gpios = <&gpio0 11 0>;  /* P7 - Venstre */
+            label = "LED Left";
+        };
+        
+        led_right: led_right {
+            gpios = <&gpio0 13 0>;  /* P15 - Høyre */
+            label = "LED Right";
+        };
+        led_test: led_test {
+            gpios = <&gpio0 3 0>;  /* P3 - Hvit LED */
+            label = "LED Test";
+        };
+    };
+};
