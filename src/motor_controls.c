@@ -214,36 +214,34 @@ void motor_stop_idle(void)
 
 void motor_drive_from_joystick(int16_t x_pos, int16_t y_pos)
 {
-    //konverterer til -100 til +100
-
-    int32_t forward = 0;  // -100 til +100
-    int32_t turn = 0;     // -100 til +100
+    int32_t forward = 0;  /* -100 to +100 */
+    int32_t turn = 0;     /* -100 to +100 */
     
-    // Calculate forward/backward from Y axis 
+    /* Y axis = forward/backward */
     if (y_pos > JOY_CENTER + JOY_DEADZONE) {
         forward = ((y_pos - JOY_CENTER) * 100) / (JOY_MAX - JOY_CENTER);
     } else if (y_pos < JOY_CENTER - JOY_DEADZONE) {
         forward = ((y_pos - JOY_CENTER) * 100) / JOY_CENTER;
     }
     
-    // Calculate turn from X axis
+    /* X axis = turning */
     if (x_pos > JOY_CENTER + JOY_DEADZONE) {
         turn = ((x_pos - JOY_CENTER) * 100) / (JOY_MAX - JOY_CENTER);
     } else if (x_pos < JOY_CENTER - JOY_DEADZONE) {
         turn = ((x_pos - JOY_CENTER) * 100) / JOY_CENTER;
     }
     
-   
+    /* Tank drive mixing */
     int32_t left_speed = forward + turn;
     int32_t right_speed = forward - turn;
     
-    // Clamp to -100 to +100
+    /* Clamp to -100 to +100 */
     if (left_speed > 100) left_speed = 100;
     if (left_speed < -100) left_speed = -100;
     if (right_speed > 100) right_speed = 100;
     if (right_speed < -100) right_speed = -100;
     
-    // Determine direction and absolute speed for each side
+    /* Determine direction and speed for each side */
     Motor_direction left_dir = Stop;
     Motor_direction right_dir = Stop;
     uint32_t left_pwm = 0;
@@ -265,13 +263,18 @@ void motor_drive_from_joystick(int16_t x_pos, int16_t y_pos)
         right_pwm = (uint32_t)(-right_speed);
     }
     
+    /* Drive all 4 motors */
+    /* Venstre side: Motor_A_Front + Motor_A_Back */
+    /* Høyre side: Motor_B_Front + Motor_B_Back */
+
     Drive_one_motor(Motor_A_Front, left_dir, left_pwm);
     Drive_one_motor(Motor_A_Back, left_dir, left_pwm);
+
     Drive_one_motor(Motor_B_Front, right_dir, right_pwm);
     Drive_one_motor(Motor_B_Back, right_dir, right_pwm);
-
+    
     if (forward != 0 || turn != 0) {
-        printk("Joystick: fwd=%4d/%4d turn=%4d/%4d -> L:%4d%% R:%4d%%\n", 
-                 forward, turn, left_speed, right_speed);
+        printk("fwd=%d turn=%d -> L:%d%% R:%d%%\n", 
+               forward, turn, left_speed, right_speed);
     }
 }
