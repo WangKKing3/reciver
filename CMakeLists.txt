@@ -3,4 +3,4 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(reciver)
 
-target_sources(app PRIVATE src/main.c src/BLE.c src/LED.c)
+target_sources(app PRIVATE src/main.c src/BLE.c src/motor_controls.c src/pwm.c)

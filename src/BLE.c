@@ -1,10 +1,11 @@
 #include "BLE.h"
-#include "LED.h"
+#include "motor_controls.h"
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/uuid.h>
 
+//Universally Unique Identifiers
 #define JOYSTICK_SVC_UUID \
 	BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x56789abcdef0)
 
@@ -19,20 +20,20 @@ static struct bt_gatt_discover_params discov_param;
 static struct bt_gatt_subscribe_params subscribe_param;
 static struct bt_conn *default_conn;
 
-/* Timeout system - slår av LED-er hvis ingen data mottas */
-#define DATA_TIMEOUT_MS 200  /* 200ms timeout */
+
+#define DATA_TIMEOUT_MS 200
 
 static struct k_work_delayable timeout_work;
 static bool timeout_initialized = false;
 
-/* Timeout callback - kalles når ingen data mottas innen timeout */
+// Kalles når ingen data mottas innen timeout
 static void data_timeout_handler(struct k_work *work)
 {
-	printk("Timeout: No data received - starting idle animation\n");
-	led_start_idle_animation();
+	printk("Timeout: No data received - starting idle\n");
+	motor_start_idle();
 }
 
-/* Reset timeout timer - kalles hver gang data mottas */
+//kalles hver gang data mottas 
 static void reset_timeout(void)
 {
 	if (timeout_initialized) {
@@ -54,13 +55,11 @@ static uint8_t notify_func(struct bt_conn *conn,
 	if (len == sizeof(struct joystick_data)) {
 		printk("Joystick: X=%d, Y=%d ", data->x_pos, data->y_pos);
 		
-		/* Stopp idle animation hvis den kjører */
-		led_stop_idle_animation();
+		motor_stop_idle();
 		
-		/* Oppdater LED-ene basert på joystick-posisjon */
-		led_update_direction(data->x_pos, data->y_pos);
+		motor_drive_from_joystick(data->x_pos, data->y_pos);
 		
-		/* Reset timeout - vi mottok data */
+		// Reset timeout - vi mottok data
 		reset_timeout();
 		
 	} else {
@@ -119,11 +118,11 @@ static uint8_t discover_func(struct bt_conn *conn,
 			printk("Subscribed! Waiting for data...\n");
 		}
 	}
-
+	// Continue discovery
 	return BT_GATT_ITER_STOP;
 }
 
-/* Device found during scan */
+// Device found during scan 
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
                          struct net_buf_simple *ad_buf)
 {
@@ -134,14 +133,15 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 		return;
 	}
 
-	/* Only process advertising data */
+	// Only process advertising data 
+	/** Non-connectable and non-scannable advertising. */
 	if (type != BT_GAP_ADV_TYPE_ADV_IND) {
 		return;
 	}
 
 	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
 
-	/* Parse advertising data */
+	// Parse advertising data 
 	while (ad_buf->len > 1) {
 		uint8_t len = net_buf_simple_pull_u8(ad_buf);
 		uint8_t ad_type;
@@ -178,7 +178,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	}
 }
 
-/* Connection callbacks */
+// Connection callbacks 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -192,7 +192,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 	printk("Connected: %s\n", addr);
 
-	/* Start service discovery */
+	// start service discovery
 	discov_param.uuid = &joystick_svc_uuid.uuid;
 	discov_param.func = discover_func;
 	discov_param.start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
@@ -218,10 +218,10 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 		default_conn = NULL;
 	}
 
-	/* Start idle animation ved disconnect */
-	led_start_idle_animation();
+	// Start idle ved disconnect
+	motor_start_idle();
 
-	/* Restart scanning */
+	// Restart scanning
 	printk("Restarting scan...\n");
 	ble_start_scan();
 }
@@ -231,7 +231,7 @@ static struct bt_conn_cb conn_callbacks = {
 	.disconnected = disconnected,
 };
 
-/* Public functions */
+// Public functions 
 int ble_init(void)
 {
 	int err;
@@ -241,12 +241,12 @@ int ble_init(void)
 	printk("micro:bit v2 - Zephyr SDK v2.5.1\n");
 	printk("===========================================\n\n");
 
-	/* Initialize timeout work */
+	// Initialize timeout work
 	k_work_init_delayable(&timeout_work, data_timeout_handler);
 	timeout_initialized = true;
 	printk("Timeout system initialized (%d ms)\n", DATA_TIMEOUT_MS);
 
-	/* Initialize Bluetooth */
+	// Initialize Bluetooth 
 	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
@@ -257,8 +257,7 @@ int ble_init(void)
 
 	bt_conn_cb_register(&conn_callbacks);
 
-	/* Start idle animation ved oppstart */
-	led_start_idle_animation();
+	motor_start_idle();
 
 	return 0;
 }
