@@ -1,11 +1,10 @@
 #include "BLE.h"
-#include "motor_controls.h"
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/uuid.h>
 
-//Universally Unique Identifiers
+/* Universally Unique Identifiers - må matche sender */
 #define JOYSTICK_SVC_UUID \
 	BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x56789abcdef0)
 
@@ -20,55 +19,35 @@ static struct bt_gatt_discover_params discov_param;
 static struct bt_gatt_subscribe_params subscribe_param;
 static struct bt_conn *default_conn;
 
+/* Callback registrert fra main */
+static joystick_data_callback_t user_callback = NULL;
 
-#define DATA_TIMEOUT_MS 200
-
-static struct k_work_delayable timeout_work;
-static bool timeout_initialized = false;
-
-// Kalles når ingen data mottas innen timeout
-static void data_timeout_handler(struct k_work *work)
-{
-	printk("Timeout: No data received - starting idle\n");
-	motor_start_idle();
-}
-
-//kalles hver gang data mottas 
-static void reset_timeout(void)
-{
-	if (timeout_initialized) {
-		k_work_reschedule(&timeout_work, K_MSEC(DATA_TIMEOUT_MS));
-	}
-}
-
+/* Notification callback - kaller brukerens callback */
 static uint8_t notify_func(struct bt_conn *conn,
                            struct bt_gatt_subscribe_params *param,
                            const void *buf, uint16_t len)
 {
-	const struct joystick_data *data = buf;
-
-	if (!data || !len) {
+	if (!buf || !len) {
 		printk("Unsubscribed\n");
 		return BT_GATT_ITER_STOP;
 	}
 
 	if (len == sizeof(struct joystick_data)) {
-		printk("Joystick: X=%d, Y=%d ", data->x_pos, data->y_pos);
+		const struct joystick_data *data = buf;
 		
-		motor_stop_idle();
-		
-		motor_drive_from_joystick(data->x_pos, data->y_pos);
-		
-		// Reset timeout - vi mottok data
-		reset_timeout();
-		
+		/* Kall brukerens callback hvis registrert */
+		if (user_callback) {
+			user_callback(data);
+		}
 	} else {
-		printk("Invalid data length: %d\n", len);
+		printk("Invalid data length: %d (expected %d)\n", 
+		       len, sizeof(struct joystick_data));
 	}
 
 	return BT_GATT_ITER_CONTINUE;
 }
 
+/* GATT discovery function */
 static uint8_t discover_func(struct bt_conn *conn,
                              const struct bt_gatt_attr *attr,
                              struct bt_gatt_discover_params *param)
@@ -115,14 +94,14 @@ static uint8_t discover_func(struct bt_conn *conn,
 		if (err && err != -EALREADY) {
 			printk("Subscribe failed (err %d)\n", err);
 		} else {
-			printk("Subscribed! Waiting for data...\n");
+			printk("Subscribed! Waiting for joystick data...\n");
 		}
 	}
-	// Continue discovery
+
 	return BT_GATT_ITER_STOP;
 }
 
-// Device found during scan 
+/* Device found during scan */
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
                          struct net_buf_simple *ad_buf)
 {
@@ -133,15 +112,12 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 		return;
 	}
 
-	// Only process advertising data 
-	/** Non-connectable and non-scannable advertising. */
 	if (type != BT_GAP_ADV_TYPE_ADV_IND) {
 		return;
 	}
 
 	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
 
-	// Parse advertising data 
 	while (ad_buf->len > 1) {
 		uint8_t len = net_buf_simple_pull_u8(ad_buf);
 		uint8_t ad_type;
@@ -156,14 +132,13 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 
 		ad_type = net_buf_simple_pull_u8(ad_buf);
 
-		/* Look for our service UUID */
 		if (ad_type == BT_DATA_UUID128_ALL && len == 17) {
 			if (!memcmp(ad_buf->data, joystick_svc_uuid.val, 16)) {
 				printk("Found joystick device: %s\n", addr_str);
 				printk("Connecting...\n");
-				
+
 				bt_le_scan_stop();
-				
+
 				err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN,
 				                        BT_LE_CONN_PARAM_DEFAULT,
 				                        &default_conn);
@@ -178,7 +153,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	}
 }
 
-// Connection callbacks 
+/* Connection callbacks */
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -192,7 +167,6 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 	printk("Connected: %s\n", addr);
 
-	// start service discovery
 	discov_param.uuid = &joystick_svc_uuid.uuid;
 	discov_param.func = discover_func;
 	discov_param.start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
@@ -218,10 +192,6 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 		default_conn = NULL;
 	}
 
-	// Start idle ved disconnect
-	motor_start_idle();
-
-	// Restart scanning
 	printk("Restarting scan...\n");
 	ble_start_scan();
 }
@@ -231,22 +201,14 @@ static struct bt_conn_cb conn_callbacks = {
 	.disconnected = disconnected,
 };
 
-// Public functions 
-int ble_init(void)
+/* Public functions */
+int ble_init(joystick_data_callback_t cb)
 {
 	int err;
 
-	printk("\n\n===========================================\n");
-	printk("Joystick Receiver\n");
-	printk("micro:bit v2 - Zephyr SDK v2.5.1\n");
-	printk("===========================================\n\n");
+	/* Lagre callback */
+	user_callback = cb;
 
-	// Initialize timeout work
-	k_work_init_delayable(&timeout_work, data_timeout_handler);
-	timeout_initialized = true;
-	printk("Timeout system initialized (%d ms)\n", DATA_TIMEOUT_MS);
-
-	// Initialize Bluetooth 
 	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
@@ -256,8 +218,6 @@ int ble_init(void)
 	printk("Bluetooth initialized\n");
 
 	bt_conn_cb_register(&conn_callbacks);
-
-	motor_start_idle();
 
 	return 0;
 }
@@ -272,8 +232,7 @@ int ble_start_scan(void)
 		return err;
 	}
 
-	printk("Scanning for devices...\n");
-	printk("Looking for: BitPlayer_Joy\n\n");
+	printk("Scanning for BitPlayer_Joy...\n");
 
 	return 0;
 }

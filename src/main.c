@@ -2,47 +2,49 @@
 #include <zephyr/sys/printk.h>
 #include "BLE.h"
 #include "motor_controls.h"
+#include "joystick_control.h"
+
+/* Callback fra BLE når joystick data mottas */
+static void joystick_callback(const struct joystick_data *data)
+{
+	bool btn_a = (data->buttons & BTN_A_MASK) != 0;
+
+	printk("X:%4d Y:%4d %s\n", data->x_pos, data->y_pos, btn_a ? "[A] DRIVE" : "");
+
+
+	if (btn_a) {
+		joystick_drive(data->x_pos, data->y_pos);
+	} else {
+		Stop_motors();
+	}
+}
 
 int main(void)
 {
 	int err;
 
-	printk("\n\n===========================================\n");
-	printk("BLE Motor Controller\n");
-	printk("micro:bit v2 - Zephyr SDK v2.5.1\n");
-	printk("===========================================\n\n");
+	printk("=== BLE Car ===\n");
 
-	// Initialize motor system 
 	err = motors_start();
 	if (err) {
-		printk("Motor init failed (err %d)\n", err);
+		printk("Motor init failed\n");
 		return -1;
 	}
-	printk("Motors initialized!\n");
 
-	// Initialize BLE 
-	err = ble_init();
+	err = ble_init(joystick_callback);
 	if (err) {
-		printk("BLE init failed (err %d)\n", err);
+		printk("BLE init failed\n");
 		return -1;
 	}
 
 	err = ble_start_scan();
 	if (err) {
-		printk("Scan start failed (err %d)\n", err);
+		printk("Scan failed\n");
 		return -1;
 	}
 
-	printk("\n===========================================\n");
-	printk("System ready!\n");
-	printk("Waiting for joystick connection...\n");
-	printk("\n");
-	printk("Controls:\n");
-	printk("  - Button A NOT pressed: Idle demo runs\n");
-	printk("  - Button A PRESSED: Joystick controls motors\n");
-	printk("===========================================\n\n");
+	printk("Hold A to drive\n");
 
-	/* Main loop - just keep running */
 	while (1) {
 		k_sleep(K_SECONDS(1));
 	}

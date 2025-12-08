@@ -30,59 +30,11 @@ static const motor_channel_t motors[] = {
     {&motor_b_in3, &motor_b_in4, pwm_write_back_b}
 };
 
-#define IDLE_STEP_DURATION_MS  2000
-
-static struct k_work_delayable idle_work;
-static bool idle_running = false;
-static uint8_t idle_step = 0;
-
-// Idle sequence steps 
-typedef struct {
-    Motor_direction direction;
-    uint32_t speed;
-    const char *description;
-} idle_step_t;
-
-// Define idle sequence
-static const idle_step_t idle_sequence[] = {
-    {Forward,  100, "Forward 100%"},
-    {Stop,     0,   "Stop"},
-    {Backward, 100, "Backward 100%"},
-    {Stop,     0,   "Stop"},
-    {Forward,  50,  "Forward 50%"},
-    {Stop,     0,   "Stop"},
-    {Backward, 50,  "Backward 50%"},
-    {Stop,     0,   "Stop"}
-};
-#define IDLE_STEPS (sizeof(idle_sequence) / sizeof(idle_sequence[0]))
-
 static uint32_t percentage_to_pwm(uint32_t speed_percentage){
     if(speed_percentage > 100){
         speed_percentage = 100;
     }
     return (speed_percentage * pwm_period_ns) / 100;
-}
-
-// Idle work handler 
-static void idle_handler(struct k_work *work)
-{
-    if (!idle_running) {
-        return;
-    }
-
-    const idle_step_t *step = &idle_sequence[idle_step];
-    
-    printk("Idle: %s\n", step->description);
-    
-    if (step->direction == Stop) {
-        Stop_motors();
-    } else {
-        Drive_motors(step->direction, step->speed);
-    }
-
-    idle_step = (idle_step + 1) % IDLE_STEPS;
-
-    k_work_reschedule(&idle_work, K_MSEC(IDLE_STEP_DURATION_MS));
 }
 
 int motors_start(){
@@ -110,16 +62,9 @@ int motors_start(){
     if(pwm_begin() != 0){
         return -1;
     }
-
-    /* Initialize idle work */
-    k_work_init_delayable(&idle_work, idle_handler);
-    
-    printk("Motor system initialized\n");
     return 0;
 }
 
-/*###################################################################################*/
-// Oske motor control functions
 void Drive_one_motor(Motor_name motor, Motor_direction direction, uint32_t speed_percentage){
     if(motor >= ARRAY_SIZE(motors)){
         printk("Error: Invalid motor selection.\n");
@@ -158,123 +103,43 @@ void Drive_motors(Motor_direction direction, uint32_t speed_percentage){
         Stop_motors();
         return;
     }
-
-    Drive_one_motor(Motor_A_Front, direction, speed_percentage);
-    Drive_one_motor(Motor_A_Back, direction, speed_percentage);
-    Drive_one_motor(Motor_B_Front, direction, speed_percentage);
-    Drive_one_motor(Motor_B_Back, direction, speed_percentage);
+    switch(direction){
+        case Rotate_Right:
+            Drive_one_motor(Motor_Left_Front, Forward, speed_percentage);
+            Drive_one_motor(Motor_Left_Back, Forward, speed_percentage);
+            Drive_one_motor(Motor_Right_Front, Backward, speed_percentage);
+            Drive_one_motor(Motor_Right_Back, Backward, speed_percentage);
+            return;
+        case Rotate_Left:
+            Drive_one_motor(Motor_Left_Front, Backward, speed_percentage);
+            Drive_one_motor(Motor_Left_Back, Backward, speed_percentage);
+            Drive_one_motor(Motor_Right_Front, Forward, speed_percentage);
+            Drive_one_motor(Motor_Right_Back, Forward, speed_percentage);
+            return;
+        case Right:
+            Drive_one_motor(Motor_Left_Front, Forward, speed_percentage);
+            Drive_one_motor(Motor_Left_Back, Backward, speed_percentage);
+            Drive_one_motor(Motor_Right_Front, Backward, speed_percentage);
+            Drive_one_motor(Motor_Right_Back, Forward, speed_percentage);
+            return;
+        case Left:
+            Drive_one_motor(Motor_Left_Front, Backward, speed_percentage);
+            Drive_one_motor(Motor_Left_Back, Forward, speed_percentage);
+            Drive_one_motor(Motor_Right_Front, Forward, speed_percentage);
+            Drive_one_motor(Motor_Right_Back, Backward, speed_percentage);
+            return;
+        default:
+            break;
+    }
+    Drive_one_motor(Motor_Left_Front, direction, speed_percentage);
+    Drive_one_motor(Motor_Left_Back, direction, speed_percentage);
+    Drive_one_motor(Motor_Right_Front, direction, speed_percentage);
+    Drive_one_motor(Motor_Right_Back, direction, speed_percentage);
 }
 
 void Stop_motors(){
-    Drive_one_motor(Motor_A_Front, Stop, 0);
-    Drive_one_motor(Motor_A_Back, Stop, 0);
-    Drive_one_motor(Motor_B_Front, Stop, 0);
-    Drive_one_motor(Motor_B_Back, Stop, 0);
-}
-/*###################################################################################*/
-
-/* ========================================
- * Idle 
- * ======================================== */
-
-void motor_start_idle(void)
-{
-    if (idle_running) {
-        return;  /* Already running */
-    }
-
-    printk(">>> Starting idle <<<\n");
-    idle_running = true;
-    idle_step = 0;
-
-    /* Start idle */
-    k_work_reschedule(&idle_work, K_NO_WAIT);
-}
-
-void motor_stop_idle(void)
-{
-    if (!idle_running) {
-        return;  // Not running
-    }
-
-    printk(">>> Stopping idle <<<\n");
-    idle_running = false;
-
-    // Stop work and motors
-    k_work_cancel_delayable(&idle_work);
-    Stop_motors();
-}
-
-
-
-// Joystick thresholds
-#define JOY_CENTER      512
-#define JOY_DEADZONE    50
-#define JOY_MAX         1023
-
-void motor_drive_from_joystick(int16_t x_pos, int16_t y_pos)
-{
-    int32_t forward = 0;  /* -100 to +100 */
-    int32_t turn = 0;     /* -100 to +100 */
-    
-    /* Y axis = forward/backward */
-    if (y_pos > JOY_CENTER + JOY_DEADZONE) {
-        forward = ((y_pos - JOY_CENTER) * 100) / (JOY_MAX - JOY_CENTER);
-    } else if (y_pos < JOY_CENTER - JOY_DEADZONE) {
-        forward = ((y_pos - JOY_CENTER) * 100) / JOY_CENTER;
-    }
-    
-    /* X axis = turning */
-    if (x_pos > JOY_CENTER + JOY_DEADZONE) {
-        turn = ((x_pos - JOY_CENTER) * 100) / (JOY_MAX - JOY_CENTER);
-    } else if (x_pos < JOY_CENTER - JOY_DEADZONE) {
-        turn = ((x_pos - JOY_CENTER) * 100) / JOY_CENTER;
-    }
-    
-    /* Tank drive mixing */
-    int32_t left_speed = forward + turn;
-    int32_t right_speed = forward - turn;
-    
-    /* Clamp to -100 to +100 */
-    if (left_speed > 100) left_speed = 100;
-    if (left_speed < -100) left_speed = -100;
-    if (right_speed > 100) right_speed = 100;
-    if (right_speed < -100) right_speed = -100;
-    
-    /* Determine direction and speed for each side */
-    Motor_direction left_dir = Stop;
-    Motor_direction right_dir = Stop;
-    uint32_t left_pwm = 0;
-    uint32_t right_pwm = 0;
-    
-    if (left_speed > 0) {
-        left_dir = Forward;
-        left_pwm = (uint32_t)left_speed;
-    } else if (left_speed < 0) {
-        left_dir = Backward;
-        left_pwm = (uint32_t)(-left_speed);
-    }
-    
-    if (right_speed > 0) {
-        right_dir = Forward;
-        right_pwm = (uint32_t)right_speed;
-    } else if (right_speed < 0) {
-        right_dir = Backward;
-        right_pwm = (uint32_t)(-right_speed);
-    }
-    
-    /* Drive all 4 motors */
-    /* Venstre side: Motor_A_Front + Motor_A_Back */
-    /* Høyre side: Motor_B_Front + Motor_B_Back */
-
-    Drive_one_motor(Motor_A_Front, left_dir, left_pwm);
-    Drive_one_motor(Motor_A_Back, left_dir, left_pwm);
-
-    Drive_one_motor(Motor_B_Front, right_dir, right_pwm);
-    Drive_one_motor(Motor_B_Back, right_dir, right_pwm);
-    
-    if (forward != 0 || turn != 0) {
-        printk("fwd=%d turn=%d -> L:%d%% R:%d%%\n", 
-               forward, turn, left_speed, right_speed);
-    }
+    Drive_one_motor(Motor_Left_Front, Stop, 0);
+    Drive_one_motor(Motor_Left_Back, Stop, 0);
+    Drive_one_motor(Motor_Right_Front, Stop, 0);
+    Drive_one_motor(Motor_Right_Back, Stop, 0);
 }
