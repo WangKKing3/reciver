@@ -6,6 +6,10 @@
 #define JOY_DEADZONE    50
 #define JOY_MAX         1023
 
+static int16_t last_y_pos = JOY_CENTER;
+
+static int16_t last_x_pos = JOY_CENTER;
+
 void joystick_drive(int16_t x_pos, int16_t y_pos)
 {
     int32_t forward = 0;
@@ -27,29 +31,31 @@ void joystick_drive(int16_t x_pos, int16_t y_pos)
 
     /* Ingen input - stopp */
     if (forward == 0 && turn == 0) {
-        Stop_motors();
+
+        bool was_forward = last_y_pos > (JOY_CENTER + JOY_DEADZONE);
+        bool going_backward = y_pos < (JOY_CENTER - JOY_DEADZONE);
+
+       
+        bool was_backward = last_y_pos < (JOY_CENTER - JOY_DEADZONE);
+        bool going_forward = y_pos > (JOY_CENTER + JOY_DEADZONE);
+
+        bool was_active = (last_y_pos > JOY_CENTER + JOY_DEADZONE) || 
+                          (last_y_pos < JOY_CENTER - JOY_DEADZONE);
+
+        if (was_active)
+        {
+             Stop_motors(); 
+             // Legg inn en liten forsinkelse her hvis problemet vedvarer (ikke ideelt, men kan hjelpe L298N)
+             // k_sleep(K_MSEC(1)); 
+        }
+        
+        last_y_pos = y_pos;
+        last_x_pos = x_pos;
+
         return;
     }
 
-    /* Rett frem eller bakover */
-    if (turn == 0) {
-        if (forward > 0) {
-            Drive_motors(Forward, (uint32_t)forward);
-        } else {
-            Drive_motors(Backward, (uint32_t)(-forward));
-        }
-        return;
-    }
 
-    /* Kun svinging på stedet (ingen forward/backward) */
-    if (forward == 0) {
-        if (turn > 0) {
-            Drive_motors(Rotate_Right, (uint32_t)turn);
-        } else {
-            Drive_motors(Rotate_Left, (uint32_t)(-turn));
-        }
-        return;
-    }
 
     /* Tank drive mixing - forward + turn */
     int32_t left = forward + turn;
@@ -90,4 +96,7 @@ void joystick_drive(int16_t x_pos, int16_t y_pos)
     Drive_one_motor(Motor_Left_Back, left_dir, left_speed);
     Drive_one_motor(Motor_Right_Front, right_dir, right_speed);
     Drive_one_motor(Motor_Right_Back, right_dir, right_speed);
+
+    last_y_pos = y_pos;
+    last_x_pos = x_pos;
 }
