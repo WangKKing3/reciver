@@ -5,8 +5,7 @@ project(reciver)
 
 target_sources(app PRIVATE
     src/main.c
-    src/BLE.c
+    src/receiver_ble.c
     src/motor_controls.c
     src/pwm.c
-    src/joystick_control.c
 )
