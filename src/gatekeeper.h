@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 void bluetouth_signal_recived();
-void bluetouth_release(); // Idel mottas
+void bluetouth_release(); // Frigjør Bluetooth kontroll
 void timeout_control();
 
 bool bluetouth_in_control();

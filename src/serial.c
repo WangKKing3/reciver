@@ -12,7 +12,7 @@ static const struct device *uart_dev = DEVICE_DT_GET(DT_NODELABEL(uart1));
 static char rx_buffer[128];
 static int rx_pos = 0;
 static int current_speed = 100;
-static char last_command = 'A'; 
+static char last_command = 'S'; 
 
 static void serial_cb(const struct device *dev, void *user_data){
     uint8_t c;
@@ -56,15 +56,15 @@ void uart_send_str(const char *str){
     }
 }
 
-//|-- Execute the last serial command received
+//-- Execute the last serial command received
 void execute_serial_last_action(){
-    process_serial_command(&last_command);
+    process_serial_command(&last_command); // Reuse the last command character // kan være en bug her
 }
 
 void process_serial_command(char* serial_command){
     int len = strlen(serial_command);
 
-
+    // Parse command
     if(strcmp(serial_command, "FORWARD") == 0 || strcmp(serial_command, "F") == 0){
         last_command = 'F';
     }

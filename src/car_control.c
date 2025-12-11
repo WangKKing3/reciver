@@ -33,9 +33,13 @@ static void on_drive_data(Motor_direction dir, uint8_t speed)
     last_rx = k_uptime_get();
 
     if (dir == Idle) {
-        printk("Idle command received, ignoring.\n");
+        bluetouth_release(); // Frigjør kontroll hvis Idle mottatt (Gjør at serial tar over)
+        // bt_active = false; Serial tar over i bluetouth_release
         return;
     }
+
+    bluetouth_signal_recived(); // Oppdater timeout
+    // bt_active = true; Serial blir blokket
 
     printk("[RX] %-5s %3d%%\n", dir_name(dir), speed);
 
@@ -76,6 +80,7 @@ void car_controller_start(void){
     ble_start_scan();
 }
 
+// Periodisk sjekk for timeout
 void car_controller_check_timeout(void){ 
     /* Main loop - bare timeout sjekk */
     if (last_rx > 0 && motors_on) {

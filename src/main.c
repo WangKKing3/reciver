@@ -13,7 +13,7 @@
 
 int main(void)
 {
-
+    // Initialize car controller
     if (car_controller_init() != 0) {
         printk("Car controller initialization failed!\n");
         return -1;

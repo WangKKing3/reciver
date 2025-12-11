@@ -4,10 +4,10 @@
 #include "motor_controls.h"
 #include "serial.h"
 
-static bool bt_active = false;
+static bool bt_active = false; 
 static int64_t bt_timer_until_timeout = 0;
 
-#define CONTROL_TIMEOUT_MS 500
+#define CONTROL_TIMEOUT_MS 3000 // 3 sekunder
 
 // Kalles når Bluetooth kontroll mottar signal
 void bluetouth_signal_recived(){
@@ -15,16 +15,15 @@ void bluetouth_signal_recived(){
     if(!bt_active){
         printk("Bluetooth control activated.\n");
         bt_active = true;
-        
     }
 }
 
-// Kalles når Bluetooth kontroll frigjøres (ingen data mottas)
+// Kalles når Bluetooth kontroll frigis (Gjør at serial tar over)
 void bluetouth_release(){
     if(bt_active){
         bt_active = false;
         printk("Bluetooth control released.\n");
-        execute_serial_last_action();// Gjenoppta siste serial handling
+        execute_serial_last_action();// Gjenoppta siste serial handling // kan fjær
     }
 }
 
@@ -35,11 +34,12 @@ void timeout_control(){
         if(current_time - bt_timer_until_timeout >= CONTROL_TIMEOUT_MS){
             bt_active = false;
             printk("Bluetooth control deactivated due to timeout.\n");
-            execute_serial_last_action();
+            execute_serial_last_action(); // Gjenoppta siste serial handling // kan fjærnees men serial vil ikke gjennoppta handling før ny serial kommando mottas
         }
     }
 }
 
-bool bluetouth_in_control(){
-    return bt_active;
+
+bool bluetouth_in_control(){ // sjekker om knapper er trykket
+    return bt_active; 
 }

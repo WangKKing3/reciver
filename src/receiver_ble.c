@@ -16,10 +16,10 @@ static struct bt_uuid_128 svc_uuid = BT_UUID_INIT_128(DRIVE_SVC_UUID);
 static struct bt_uuid_128 chr_uuid = BT_UUID_INIT_128(DRIVE_CHR_UUID);
 static struct bt_uuid *ccc_uuid = BT_UUID_GATT_CCC;
 
-static struct bt_gatt_discover_params disc_params;
-static struct bt_gatt_subscribe_params sub_params;
-static struct bt_conn *conn;
-static drive_callback_t user_cb;
+static struct bt_gatt_discover_params disc_params; // Discovery parameters
+static struct bt_gatt_subscribe_params sub_params; // Subscription parameters
+static struct bt_conn *conn; // Current connection
+static drive_callback_t user_cb; // User callback
 
 /* Packet struct - må matche sender */
 struct drive_packet {
