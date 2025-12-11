@@ -131,7 +131,6 @@ void Drive_motors(Motor_direction direction, uint32_t speed_percentage){
         default:
             break;
     }
-
     Drive_one_motor(Motor_Left_Front, direction, speed_percentage);
     Drive_one_motor(Motor_Left_Back, direction, speed_percentage);
     Drive_one_motor(Motor_Right_Front, direction, speed_percentage);

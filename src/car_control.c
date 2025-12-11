@@ -22,16 +22,20 @@ static const char *dir_name(Motor_direction d)
         case Right: return "RIGHT";
         case Left: return "LEFT";
         case Stop: return "STOP";
+        case Idle: return "IDLE";
         default: return "?";
     }
 }
 
 static void on_drive_data(Motor_direction dir, uint8_t speed)
 {
-    current_dir = dir;
-    current_speed = speed;
+  
     last_rx = k_uptime_get();
-    motors_on = true;
+
+    if (dir == Idle) {
+        printk("Idle command received, ignoring.\n");
+        return;
+    }
 
     printk("[RX] %-5s %3d%%\n", dir_name(dir), speed);
 
