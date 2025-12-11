@@ -1,81 +1,18 @@
 #include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
-
-#include "receiver_ble.h"
-#include "motor_controls.h"
-
-#define TIMEOUT_MS 1000      /* Stopp motorene hvis ingen data på 1 sekund */
-
-static Motor_direction current_dir = Stop;
-static uint8_t current_speed = 0;
-static int64_t last_rx = 0;
-static bool motors_on = false;
-
-static const char *dir_name(Motor_direction d)
-{
-    switch (d) {
-        case Forward: return "FWD";
-        case Backward: return "BWD";
-        case Rotate_Right: return "ROT_R";
-        case Rotate_Left: return "ROT_L";
-        case Right: return "RIGHT";
-        case Left: return "LEFT";
-        case Stop: return "STOP";
-        default: return "?";
-    }
-}
-
-static void on_drive_data(Motor_direction dir, uint8_t speed)
-{
-    current_dir = dir;
-    current_speed = speed;
-    last_rx = k_uptime_get();
-    motors_on = true;
-
-    printk("[RX] %-5s %3d%%\n", dir_name(dir), speed);
-
-    if(dir == Stop){
-        if (motors_on) {
-            Stop_motors();
-            motors_on = false;
-        }
-    } else {
-        Drive_motors(dir, speed);
-        motors_on = true;
-    }
-}
+#include "car_control.h"
 
 int main(void)
 {
-    printk("\n=== BLE Car Receiver ===\n");
-    printk("Receives Motor_direction directly\n\n");
-
-    /* Init motors */
-    if (motors_start() != 0) {
-        printk("Motor init failed\n");
-        return -1;
-    }
-    printk("Motors ready\n");
-
-    /* Init BLE */
-    if (ble_init(on_drive_data) != 0) {
-        printk("BLE init failed\n");
+    if (car_controller_init() != 0) {
         return -1;
     }
 
-    ble_start_scan();
+    car_controller_start();
 
-    /* Main loop - bare timeout sjekk */
     while (1) {
-        if (last_rx > 0 && motors_on) {
-            int64_t age = k_uptime_get() - last_rx;
-            if (age > TIMEOUT_MS) {
-                printk("[TIMEOUT] Stopping\n");
-                Stop_motors();
-                motors_on = false;
-            }
-        }
+        car_controller_check_timeout();
         k_msleep(100);
     }
+
     return 0;
 }

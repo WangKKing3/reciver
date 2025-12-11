@@ -8,4 +8,5 @@ target_sources(app PRIVATE
     src/receiver_ble.c
     src/motor_controls.c
     src/pwm.c
+    src/car_control.c
 )
