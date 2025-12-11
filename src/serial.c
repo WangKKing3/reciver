@@ -55,6 +55,8 @@ void uart_send_str(const char *str){
         uart_poll_out(uart_dev, str[i]);
     }
 }
+
+//|-- Execute the last serial command received
 void execute_serial_last_action(){
     process_serial_command(&last_command);
 }

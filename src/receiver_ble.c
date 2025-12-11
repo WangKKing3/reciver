@@ -134,7 +134,6 @@ static struct bt_conn_cb conn_cb = {
     .disconnected = on_disconnected,
 };
 
-/* Public API */
 int ble_init(drive_callback_t cb)
 {
     user_cb = cb;
